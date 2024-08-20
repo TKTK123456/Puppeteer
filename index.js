@@ -35,7 +35,7 @@ const page = await browser.newPage();
   await page.goto('https://orteil.dashnet.org/cookieclicker/');
   await page.setViewport({width: 1080, height: 1024});
   await page.click(`a[data-cc-event="click:dismiss"]`)
-  await page.mouse.click(540, 350, { button: 'left' })
+  await page.mouse.click(540, 450, { button: 'left' })
   await sleep(3000)
   await recorder.stop();
   await browser.close();
