@@ -7,6 +7,7 @@ import { PuppeteerScreenRecorder } from 'puppeteer-screen-recorder';
 import fs from "node:fs";
 import path from "node:path";
 import stream from "node:stream";
+import readline from 'node:readline';
 
 const __dirname = path.resolve();
 
@@ -19,7 +20,10 @@ function sleep(ms) {
     setTimeout(resolve, ms);
   });
 }
-
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
 
 
 async function main() {
@@ -35,7 +39,6 @@ async function main() {
   await context.overridePermissions('https://www.freeformatter.com/html-formatter.html', ['clipboard-read']);
   const page = await browser.newPage();
   const cursor = createCursor(page)
-  await installMouseHelper(page)
   const recorder = new PuppeteerScreenRecorder(page);
   const pipeStream = new PassThrough();
   await recorder.startStream(pipeStream);
@@ -44,7 +47,6 @@ async function main() {
   await cursor.moveTo({x:540, y:512})
   await recorder.stop();
   await browser.close();
-  
 }
 
 main()
