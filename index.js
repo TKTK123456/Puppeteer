@@ -24,7 +24,11 @@ const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
 });
-
+async function writeFile(file, data) {
+  const oldData = fs.readFileSync(file, 'utf8');
+  const newData = oldData + data;
+  fs.writeFileSync(file, newData);
+}
 
 async function main() {
 
@@ -36,17 +40,38 @@ async function main() {
     executablePath: chromiumPath.trim()
   });
   const context = browser.defaultBrowserContext();
-  await context.overridePermissions('https://www.freeformatter.com/html-formatter.html', ['clipboard-read']);
+  await context.overridePermissions('https://orteil.dashnet.org/cookieclicker/', ['clipboard-read']);
   const page = await browser.newPage();
   const cursor = createCursor(page)
   const recorder = new PuppeteerScreenRecorder(page);
   const pipeStream = new PassThrough();
   await recorder.startStream(pipeStream);
-  await page.goto('https://www.freeformatter.com/html-formatter.html');
+  await page.goto('https://orteil.dashnet.org/cookieclicker/');
   await page.setViewport({width: 1080, height: 1024});
-  await cursor.moveTo({x:540, y:512})
-  await recorder.stop();
-  await browser.close();
+  await cursor.click(`a[data-cc-event="click:dismiss"]`)
+  await cursor.moveTo({x:540, y:400})
+  await cursor.click();
+  await sleep(12000);
+  console.log("Ready for control")
+  rl.on('line', async (input) => {
+    if (input === 'stop') {
+      await recorder.stop();
+      await browser.close();
+      rl.close()
+    }
+    if (input.toLowerCase() === "runcommand") {
+      rl.question(`What command? `, async (command) => {
+        if (command === 'clickcookie') {
+          rl.question(`How many times? `, async (times) => {
+            for (let i = 0; i < times; i++) {
+              await cursor.click(`#bigCookie`)
+            }
+            console.log('Done')
+          })
+        }
+      })
+    }
+  })
 }
 
 main()
