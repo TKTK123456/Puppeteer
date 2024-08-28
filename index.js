@@ -29,6 +29,9 @@ async function writeFile(file, data) {
   const newData = oldData + data;
   fs.writeFileSync(file, newData);
 }
+async function clearFile(file) {
+  fs.writeFileSync(file, '');
+}
 
 async function main() {
 
@@ -42,16 +45,15 @@ async function main() {
   const context = browser.defaultBrowserContext();
   await context.overridePermissions('https://orteil.dashnet.org/cookieclicker/', ['clipboard-read']);
   const page = await browser.newPage();
-  const cursor = createCursor(page)
   const recorder = new PuppeteerScreenRecorder(page);
   const pipeStream = new PassThrough();
   await recorder.startStream(pipeStream);
   await page.goto('https://orteil.dashnet.org/cookieclicker/');
   await page.setViewport({width: 1080, height: 1024});
-  await cursor.click(`a[data-cc-event="click:dismiss"]`)
-  await cursor.moveTo({x:540, y:400})
-  await cursor.click();
+  await page.click(`a[data-cc-event="click:dismiss"]`)
+  await page.mouse.click(540, 400);
   await sleep(12000);
+  clearFile('copyCommands.txt')
   console.log("Ready for control")
   rl.on('line', async (input) => {
     if (input === 'stop') {
@@ -64,8 +66,9 @@ async function main() {
         if (command === 'clickcookie') {
           rl.question(`How many times? `, async (times) => {
             for (let i = 0; i < times; i++) {
-              await cursor.click(`#bigCookie`)
+              await page.click('#bigCookie')
             }
+            writeFile('copyCommands.txt', `for (let i = 0; i < ${times}; i++) {\nawait page.click('#bigCookie')\n}\n`)
             console.log('Done')
           })
         }
