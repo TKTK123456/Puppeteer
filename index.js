@@ -42,7 +42,7 @@ async function clickCookie(page, times) {
 }
 async function getCookies(page) {
   const cookies = await page.evaluate(() => {
-    return Game.cookies;
+    return Game.cookiesd;
   });
   return cookies;
 }
@@ -82,6 +82,12 @@ async function load(page) {
   await page.evaluate((save) => {
     Game.ImportSaveCode(save);
   }, save);
+}
+async function getCps(page) {
+  const cps = await page.evaluate(() => {
+    return Game.cookiesPs;
+  });
+  return cps;
 }
 
 async function main() {
@@ -150,6 +156,13 @@ async function main() {
             );
             console.log("Done");
           });
+        } else if (command.toLowerCase() === "getcps") {
+          const cps = await getCps(page);
+          writeFile(
+            "copyCommands.txt",
+            `let cps = await getCps(page)\n`,
+          );
+          console.log(cps);
         }
       });
     }
