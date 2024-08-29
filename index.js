@@ -104,18 +104,47 @@ async function getPricesAsArray(page) {
 async function calcBuyingWorth(page) {
   let worth = await page.evaluate(() => {
     let Worth = [];
+    let baseBuilding = Game.Objects['Cursor'];
     for (var i in Game.Objects) {
       var me=Game.Objects[i];
-      let outputWorth = me.basePrice*1.15**(me.amount+1);
-      outputWorth = Math.log(outputWorth/(me.cps(me)*me.basePrice))/Math.log(1.15);
-      outputWorth = Math.round(outputWorth);
-      let output = `{name: ${me.name}, price: ${me.price}, worth: ${outputWorth}}`
+      let price = baseBuilding.basePrice*1.15**(baseBuilding.amount+1);
+      let outputWorth = (price*me.cps(me))/(baseBuilding.cps(baseBuilding)*me.basePrice)
+      let output = {name: me.name, price: me.price, worth: outputWorth, cps: me.cps(me)};
       Worth.push(output);
     }
     return Worth
   });
-  console.log(worth)
   return worth;
+};
+async function getBuildingsToBuy(page) {
+  let totalCookiesEarned = await page.evaluate(() => {
+    return Game.cookiesEarned;
+  });
+  let worth = await calcBuyingWorth(page);
+  let worth2 = [];
+  for (let i = 0; i < worth.length; i++) {
+    let me = worth[i];
+    if (me.price<totalCookiesEarned) {
+      worth2.push(me);
+    }
+  }
+  worth = worth2;
+  let need = [];
+  for (let i = 0; i < worth.length; i++) {
+    let me = worth[i];
+    let output = round(Math.log(me.worth)/Math.log(1.15));
+    let buildingAmountNeeded = Math.floor(output);
+    let buildingAmount = await page.evaluate((name) => {
+      if (Game.Objects[name]) {
+        return Game.Objects[name].amount;
+      } else {
+        return -1;
+      };
+    }, me.name);
+    if (buildingAmountNeeded-buildingAmount>0) {
+      need.push({name: me.name, amount: buildingAmountNeeded-buildingAmount});
+    }
+  }
 }
 
 async function main() {
@@ -170,7 +199,6 @@ async function main() {
           console.log(cookies);
         } else if (command.toLowerCase() === "getprices") {
           const prices = await getPrices(page);
-          await calcBuyingWorth(page)
           writeFile(
             "copyCommands.txt",
             `let prices = await getPrices(page)\n`,

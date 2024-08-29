@@ -1,0 +1,1 @@
+let prices = await getPrices(page)
