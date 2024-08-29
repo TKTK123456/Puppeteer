@@ -1,3 +1,3 @@
-for (let i = 0; i < 15; i++) {
-await page.click('#bigCookie')
-}
+let prices = await getPrices(page)
+await clickCookie(page, 15)
+await buyBuilding(page, Cursor)
