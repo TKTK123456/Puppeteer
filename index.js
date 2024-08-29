@@ -89,6 +89,34 @@ async function getCps(page) {
   });
   return cps;
 }
+async function getPricesAsArray(page) {
+  const prices = await page.evaluate(() => {
+    let Prices = [];
+    for (var i in Game.Objects) {
+      var me=Game.Objects[i];
+      let output = {name: me.name, price: me.price}
+      Prices += output;
+    }
+    return Prices;
+  });
+  return prices
+}
+async function calcBuyingWorth(page) {
+  let worth = await page.evaluate(() => {
+    let Worth = [];
+    for (var i in Game.Objects) {
+      var me=Game.Objects[i];
+      let outputWorth = me.basePrice*1.15**(me.amount+1);
+      outputWorth = Math.log(outputWorth/(me.cps(me)*me.basePrice))/Math.log(1.15);
+      outputWorth = Math.round(outputWorth);
+      let output = `{name: ${me.name}, price: ${me.price}, worth: ${outputWorth}}`
+      Worth.push(output);
+    }
+    return Worth
+  });
+  console.log(worth)
+  return worth;
+}
 
 async function main() {
   const { stdout: chromiumPath } = await util.promisify(exec)("which chromium");
@@ -113,7 +141,7 @@ async function main() {
   await page.mouse.click(540, 400);
   await sleep(12000);
   clearFile("copyCommands.txt");
-  load(page)
+  await load(page);
   console.log("Ready for control");
   rl.on("line", async (input) => {
     if (input === "stop") {
@@ -142,6 +170,7 @@ async function main() {
           console.log(cookies);
         } else if (command.toLowerCase() === "getprices") {
           const prices = await getPrices(page);
+          await calcBuyingWorth(page)
           writeFile(
             "copyCommands.txt",
             `let prices = await getPrices(page)\n`,
