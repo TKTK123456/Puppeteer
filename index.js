@@ -1,4 +1,16 @@
 const { createCursor, installMouseHelper } = pkg;
+import {
+  atan2,
+  chain,
+  derivative,
+  e,
+  evaluate,
+  log,
+  pi,
+  pow,
+  round,
+  sqrt,
+} from "mathjs";
 import pkg from "ghost-cursor";
 import puppeteer from "puppeteer-core";
 import { exec } from "node:child_process";
@@ -21,6 +33,19 @@ import {
   RoleManager,
   ChannelType,
 } from "discord.js";
+
+const math = {
+  atan2,
+  chain,
+  derivative,
+  e,
+  evaluate,
+  log,
+  pi,
+  pow,
+  round,
+  sqrt,
+};
 
 const client = new Client({
   intents: [
@@ -46,15 +71,6 @@ client.on("ready", () => {
     new SlashCommandBuilder()
       .setName("screenshot")
       .setDescription("sends a screenshot of the current page"),
-    new SlashCommandBuilder()
-      .setName("record")
-      .setDescription("record a screen")
-      .addChannelOption((option) => {
-        return option
-          .setName("channel")
-          .setDescription("The channel to record to")
-          .setRequired(true);
-      }),
   ];
   client.application.commands.set(commands);
 });
@@ -153,32 +169,43 @@ async function getPricesAsArray(page) {
   });
   return prices;
 }
-async function calcBuyingWorth(page) {
-  let worth = await page.evaluate(() => {
-    let Worth = [];
-    let baseBuilding = Game.Objects["Cursor"];
-    for (var i in Game.Objects) {
-      var me = Game.Objects[i];
-      let price = baseBuilding.basePrice * 1.15 ** (baseBuilding.amount + 1);
-      let outputWorth =
-        (price * me.cps(me)) / (baseBuilding.cps(baseBuilding) * me.basePrice);
-      let output = {
-        name: me.name,
-        price: me.price,
-        worth: outputWorth,
-        cps: me.cps(me),
-      };
-      Worth.push(output);
-    }
-    return Worth;
-  });
+async function calcBuyingWorth(page, building, amount) {
+  building =
+    building.slice(0, 1).toUpperCase() + building.slice(1).toLowerCase();
+  let worth = await page.evaluate(
+    (building, Amount) => {
+      let Worth = [];
+      let baseBuilding = Game.Objects[building];
+      let num = Amount;
+      if (num < baseBuilding.amount) {
+        num = baseBuilding.amount;
+      }
+      for (var i in Game.Objects) {
+        var me = Game.Objects[i];
+        let price = baseBuilding.basePrice * 1.15 ** num;
+        let outputWorth =
+          (price * me.cps(me)) /
+          (baseBuilding.cps(baseBuilding) * me.basePrice);
+        let output = {
+          name: me.name,
+          price: me.price,
+          worth: outputWorth,
+          cps: me.cps(me),
+        };
+        Worth.push(output);
+      }
+      return Worth;
+    },
+    building,
+    amount,
+  );
   return worth;
 }
-async function getBuildingsToBuy(page) {
+async function getBuildingsToBuy(page, building, amount) {
   let totalCookiesEarned = await page.evaluate(() => {
     return Game.cookiesEarned;
   });
-  let worth = await calcBuyingWorth(page);
+  let worth = await calcBuyingWorth(page, building, amount);
   let worth2 = [];
   for (let i = 0; i < worth.length; i++) {
     let me = worth[i];
@@ -190,8 +217,8 @@ async function getBuildingsToBuy(page) {
   let need = [];
   for (let i = 0; i < worth.length; i++) {
     let me = worth[i];
-    let output = round(Math.log(me.worth) / Math.log(1.15));
-    let buildingAmountNeeded = Math.floor(output);
+    let output = math.log(me.worth, 1.15);
+    let buildingAmountNeeded = math.round(output);
     let buildingAmount = await page.evaluate((name) => {
       if (Game.Objects[name]) {
         return Game.Objects[name].amount;
@@ -207,6 +234,73 @@ async function getBuildingsToBuy(page) {
     }
   }
   return need;
+}
+function removeAllFilesSync(directory) {
+  const files = fs.readdirSync(directory);
+
+  for (const file of files) {
+    const filePath = path.join(directory, file);
+    fs.unlinkSync(filePath);
+  }
+}
+async function waitForPageReady(page) {
+  await page.evaluate(async () => {
+    let counter = 0;
+    while (!Game.ready) {
+      counter++;
+      await new Promise((resolve) => {
+        setTimeout(resolve, 100);
+      });
+    }
+    return counter;
+  });
+}
+let AutoBuyAmount = 0;
+async function autoBuyBuildings(page, building) {
+  let amount = AutoBuyAmount;
+  let need = await getBuildingsToBuy(page, building, amount);
+  for (let i = 0; i < need.length; i++) {
+    let me = need[i];
+    let cookies = await getCookies(page);
+    let price = await getPricesAsArray(page).then((prices) => {
+      let price = prices.find((item) => item.name === me.name);
+      return price.price;
+    });
+    for (let i2 = 0; i2 < me.amount; i2++) {
+      if (cookies >= price) {
+        await buyBuilding(page, me.name);
+      }
+    }
+  }
+  let numBuildingsTypesNeeded = 0;
+  need = await getBuildingsToBuy(page, building, amount);
+  for (let i = 0; i < need.length; i++) {
+    let me = need[i];
+    if (me.amount > 0) {
+      numBuildingsTypesNeeded++;
+    }
+  }
+  if (numBuildingsTypesNeeded > 0) {
+    AutoBuyAmount++;
+  }
+}
+async function startAutoBuy(page, building) {
+  building = building.slice(0, 1).toUpperCase() + building.slice(1).toLowerCase();
+  let buuildingNum = await page.evaluate((building) => {
+    if (Game.Objects[building]) {
+      return Game.Objects[building].amount;
+    } else {
+      return -1;
+    }
+  }, building)
+  AutoBuyAmount = buuildingNum+1;
+  let start = Date.now();
+  await autoBuyBuildings(page, building);
+  let end = Date.now();
+  let time = end - start;
+  setInterval(async () => {
+    await autoBuyBuildings(page, building);
+  }, time)
 }
 
 async function main() {
@@ -230,18 +324,21 @@ async function main() {
   await page.setViewport({ width: 1080, height: 1024 });
   await page.click(`a[data-cc-event="click:dismiss"]`);
   await page.mouse.click(540, 400);
-  await page.waitForNavigation();
-  await sleep(12000);
+  let screenshotNum = 0;
+  removeAllFilesSync("screenshots");
   clearFile("copyCommands.txt");
+  await sleep(5000);
+  await waitForPageReady(page);
   await load(page);
+  await startAutoBuy(page, "Cursor");
   console.log("Ready for control");
   rl.on("line", async (input) => {
     if (input === "stop") {
       await save(page);
+      rl.close();
       await recorder.stop();
       await browser.close();
       await client.destroy();
-      rl.close();
     }
     if (input.toLowerCase() === "runcommand") {
       rl.question(`What command? `, async (command) => {
@@ -285,19 +382,18 @@ async function main() {
       await interaction.reply("Pong! " + client.ws.ping);
     } else if (interaction.commandName === "screenshot") {
       await interaction.reply("Screenshotting...");
+      let screenshotPath = `screenshots/${screenshotNum}.png`;
       await page.screenshot({
         type: "png",
-        path: "screenshot.png",
+        path: screenshotPath,
         fullPage: true,
       });
-      const screenshot = fs.readFileSync("screenshot.png");
+      screenshotNum++;
+      const screenshot = fs.readFileSync(screenshotPath);
       await interaction.editReply({
         content: "Screenshotted!",
         files: [screenshot],
       });
-    } else if (interaction.commandName === "record") {
-      await interaction.reply("Recording...");
-      const channel = interaction.options.getChannel("channel");
     }
   });
 }
