@@ -30,6 +30,7 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.DirectMessages,
     GatewayIntentBits.GuildWebhooks,
+    GatewayIntentBits.GuildVoiceStates,
   ],
   partials: [Partials.Channel, Partials.Message, Partials.User],
 });
@@ -205,6 +206,7 @@ async function getBuildingsToBuy(page) {
       });
     }
   }
+  return need;
 }
 
 async function main() {
@@ -228,6 +230,7 @@ async function main() {
   await page.setViewport({ width: 1080, height: 1024 });
   await page.click(`a[data-cc-event="click:dismiss"]`);
   await page.mouse.click(540, 400);
+  await page.waitForNavigation();
   await sleep(12000);
   clearFile("copyCommands.txt");
   await load(page);
@@ -294,6 +297,7 @@ async function main() {
       });
     } else if (interaction.commandName === "record") {
       await interaction.reply("Recording...");
+      const channel = interaction.options.getChannel("channel");
     }
   });
 }
