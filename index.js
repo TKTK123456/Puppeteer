@@ -313,25 +313,71 @@ async function startIntervals(page, building) {
     AutoBuyAmount = 0;
   }
   let start = Date.now();
+  await autoBuyUpgrades(page)
   await autoBuyBuildings(page, building);
   await clickCookie(page, 1);
   let end = Date.now();
   let time = end - start;
   let intervals = [];
   intervals[1] = setInterval(async () => {
+    await autoBuyUpgrades(page)
     await autoBuyBuildings(page, building);
     await clickCookie(page, 1);
   }, time);
   intervals[2] = setInterval(async () => {
-      await save(page);
-      await keepVariables("AutoBuyAmount", {
-        if: true,
-        data: AutoBuyAmount,
-      });
-    }, 60000);
+    await save(page);
+    await keepVariables("AutoBuyAmount", {
+      if: true,
+      data: AutoBuyAmount,
+    });
+  }, 60000);
   return intervals;
 }
-
+async function getUpgrades(page) {
+  let upgrades = await page.evaluate(() => {
+    let upgrades = [];
+    for (var i in Game.Upgrades) {
+      var me = Game.Upgrades[i];
+      if (me.pool != "prestige"&&me.unlocked&&!me.bought) {
+        var price = me.basePrice;
+        if (Game.Has("Toy workshop")) price *= 0.95;
+        if (Game.Has("Five-finger discount"))
+          price *= Math.pow(0.99, Game.Objects["Cursor"].amount / 100);
+        if (Game.Has("Santa's dominion")) price *= 0.98;
+        if (Game.Has("Faberge egg")) price *= 0.99;
+        if (Game.Has("Divine sales")) price *= 0.99;
+        if (Game.Has("Fortune #100")) price *= 0.99;
+        if (me.kitten && Game.Has("Kitten wages")) price *= 0.9;
+        if (Game.hasBuff("Haggler's luck")) price *= 0.98;
+        if (Game.hasBuff("Haggler's misery")) price *= 1.02;
+        price *= 1 - Game.auraMult("Master of the Armory") * 0.02;
+        price *= Game.eff("upgradeCost");
+        if (me.pool == "cookie" && Game.Has("Divine bakeries")) price /= 5;
+        let output = {
+          name: me.name,
+          id: me.id,
+          cost: price,
+          unlocked: me.unlocked,
+          bought: me.bought,
+        };
+        upgrades.push(output);
+      }
+    }
+    return upgrades;
+  });
+  return upgrades;
+}
+async function autoBuyUpgrades(page) {
+  let upgrades = await getUpgrades(page);
+  for (let i = 0; i < upgrades.length; i++) {
+    let me = upgrades[i];
+    let cookies = await getCookies(page);
+    let price = me.cost;
+    if (cookies >= price) {
+      await page.click(`div[onclick="Game.UpgradesById[${me.id}].click(event);"]`);
+    }
+  }
+}
 async function main() {
   const { stdout: chromiumPath } = await util.promisify(exec)("which chromium");
 
@@ -364,17 +410,17 @@ async function main() {
   rl.on("line", async (input) => {
     if (input === "stop") {
       await save(page);
-      rl.close();
-      await recorder.stop();
-      await browser.close();
-      await client.destroy();
-      for (let i = 0; i < intervals.length; i++) {
-        clearInterval(intervals);
-      }
       await keepVariables("AutoBuyAmount", {
         if: true,
         data: AutoBuyAmount,
       });
+      for (let i = 0; i < intervals.length; i++) {
+        clearInterval(intervals[i]);
+      }
+      rl.close();
+      await recorder.stop();
+      await browser.close();
+      await client.destroy();
     }
     if (input.toLowerCase() === "runcommand") {
       rl.question(`What command? `, async (command) => {
