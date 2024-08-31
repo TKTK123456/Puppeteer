@@ -77,7 +77,7 @@ client.on("ready", () => {
 const __dirname = path.resolve();
 
 function PassThrough() {
-  const s = new fs.createWriteStream("stream.mp4");
+  const s = new fs.createWriteStream(`streams/stream.mp4`);
   return s;
 }
 function sleep(ms) {
@@ -249,13 +249,17 @@ async function keepVariables(name, input) {
     },
   );
   if (input.if) {
-    json[name] = input.data;
+    if (input.data === "++") {
+      json[name]++;
+    } else {
+      json[name] = input.data;
+    }
     clearFile("keepVariables.json");
     writeFile("keepVariables.json", JSON.stringify(json, null, 2));
     return json[name];
   } else {
     try {
-      if (json[name]) {
+      if (json[name]||json[name]===0) {
         return json[name];
       } else {
         return false;
@@ -313,14 +317,18 @@ async function startIntervals(page, building) {
     AutoBuyAmount = 0;
   }
   let start = Date.now();
-  await autoBuyUpgrades(page)
+  await clickCookie(page, 1);
+  await autoBuyUpgrades(page);
+  await clickCookie(page, 1);
   await autoBuyBuildings(page, building);
   await clickCookie(page, 1);
   let end = Date.now();
   let time = end - start;
   let intervals = [];
   intervals[1] = setInterval(async () => {
-    await autoBuyUpgrades(page)
+    await clickCookie(page, 1);
+    await autoBuyUpgrades(page);
+    await clickCookie(page, 1);
     await autoBuyBuildings(page, building);
     await clickCookie(page, 1);
   }, time);
@@ -338,7 +346,7 @@ async function getUpgrades(page) {
     let upgrades = [];
     for (var i in Game.Upgrades) {
       var me = Game.Upgrades[i];
-      if (me.pool != "prestige"&&me.unlocked&&!me.bought) {
+      if (me.pool != "prestige" && me.unlocked && !me.bought) {
         var price = me.basePrice;
         if (Game.Has("Toy workshop")) price *= 0.95;
         if (Game.Has("Five-finger discount"))
@@ -374,10 +382,16 @@ async function autoBuyUpgrades(page) {
     let cookies = await getCookies(page);
     let price = me.cost;
     if (cookies >= price) {
-      await page.click(`div[onclick="Game.UpgradesById[${me.id}].click(event);"]`);
+      await page.click(
+        `div[onclick="Game.UpgradesById[${me.id}].click(event);"]`,
+      );
     }
   }
 }
+async function deleteFile(file) {
+  fs.unlinkSync(file);
+}
+
 async function main() {
   const { stdout: chromiumPath } = await util.promisify(exec)("which chromium");
 
