@@ -34,18 +34,17 @@ import {
   ChannelType,
 } from "discord.js";
 
-const math = {
-  atan2,
-  chain,
-  derivative,
-  e,
-  evaluate,
-  log,
-  pi,
-  pow,
-  round,
-  sqrt,
-};
+const math = {};
+math.atan2 = atan2;
+math.chain = chain;
+math.derivative = derivative;
+math.e = e;
+math.evaluate = evaluate;
+math.log = log;
+math.pi = pi;
+math.pow = pow;
+math.round = round;
+math.sqrt = sqrt;
 
 const client = new Client({
   intents: [
@@ -163,7 +162,7 @@ async function getPricesAsArray(page) {
     for (var i in Game.Objects) {
       var me = Game.Objects[i];
       let output = { name: me.name, price: me.price };
-      Prices += output;
+      Prices.push(output);
     }
     return Prices;
   });
@@ -243,6 +242,30 @@ function removeAllFilesSync(directory) {
     fs.unlinkSync(filePath);
   }
 }
+async function keepVariables(name, input) {
+  let json = await Promise.resolve(getFile("keepVariables.json")).then(
+    (value) => {
+      return JSON.parse(value);
+    },
+  );
+  if (input.if) {
+    json[name] = input.data;
+    clearFile("keepVariables.json");
+    writeFile("keepVariables.json", JSON.stringify(json, null, 2));
+    return json[name];
+  } else {
+    try {
+      if (json[name]) {
+        return json[name];
+      } else {
+        return false;
+      }
+    } catch (error) {
+      console.log(error);
+      return false;
+    }
+  }
+}
 async function waitForPageReady(page) {
   await page.evaluate(async () => {
     let counter = 0;
@@ -280,27 +303,33 @@ async function autoBuyBuildings(page, building) {
       numBuildingsTypesNeeded++;
     }
   }
-  if (numBuildingsTypesNeeded > 0) {
+  if (numBuildingsTypesNeeded === 0) {
     AutoBuyAmount++;
   }
 }
-async function startAutoBuy(page, building) {
-  building = building.slice(0, 1).toUpperCase() + building.slice(1).toLowerCase();
-  let buuildingNum = await page.evaluate((building) => {
-    if (Game.Objects[building]) {
-      return Game.Objects[building].amount;
-    } else {
-      return -1;
-    }
-  }, building)
-  AutoBuyAmount = buuildingNum+1;
+async function startIntervals(page, building) {
+  AutoBuyAmount = await keepVariables("AutoBuyAmount", { if: false, data: 0 });
+  if (!AutoBuyAmount) {
+    AutoBuyAmount = 0;
+  }
   let start = Date.now();
   await autoBuyBuildings(page, building);
+  await clickCookie(page, 1);
   let end = Date.now();
   let time = end - start;
-  setInterval(async () => {
+  let intervals = [];
+  intervals[1] = setInterval(async () => {
     await autoBuyBuildings(page, building);
-  }, time)
+    await clickCookie(page, 1);
+  }, time);
+  intervals[2] = setInterval(async () => {
+      await save(page);
+      await keepVariables("AutoBuyAmount", {
+        if: true,
+        data: AutoBuyAmount,
+      });
+    }, 60000);
+  return intervals;
 }
 
 async function main() {
@@ -330,7 +359,7 @@ async function main() {
   await sleep(5000);
   await waitForPageReady(page);
   await load(page);
-  await startAutoBuy(page, "Cursor");
+  let intervals = await startIntervals(page, "Cursor");
   console.log("Ready for control");
   rl.on("line", async (input) => {
     if (input === "stop") {
@@ -339,6 +368,13 @@ async function main() {
       await recorder.stop();
       await browser.close();
       await client.destroy();
+      for (let i = 0; i < intervals.length; i++) {
+        clearInterval(intervals);
+      }
+      await keepVariables("AutoBuyAmount", {
+        if: true,
+        data: AutoBuyAmount,
+      });
     }
     if (input.toLowerCase() === "runcommand") {
       rl.question(`What command? `, async (command) => {
